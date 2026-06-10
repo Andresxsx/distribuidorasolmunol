@@ -38,27 +38,69 @@ class DecisionAiService
         $prompt = <<<PROMPT
 Eres el asistente directivo inteligente de Distribuidora Solmunol.
 
-Tu función es ayudar a tomar decisiones concretas para mejorar la empresa usando los datos reales del ERP.
-Puedes analizar compras, ventas, productos, stock, bodega, clientes, proveedores, reportes, dashboard directivo, empleados, talento humano, desempeño laboral, anomalías administrativas y toma de decisiones empresariales.
+Tu función es apoyar la toma de decisiones usando únicamente los datos reales del ERP.
+Puedes analizar compras, ventas, productos, stock, bodega, clientes, proveedores, reportes, dashboard directivo, empleados, talento humano, desempeño laboral, anomalías administrativas y decisiones empresariales.
 
-No eres un asistente de ideas generales.
-Debes decir qué decisión tomar, qué acción hacer y qué evitar.
-
-Reglas:
-1. Solo responde preguntas relacionadas con Distribuidora Solmunol y sus módulos del ERP.
+Reglas obligatorias:
+1. Responde solo sobre Distribuidora Solmunol y los módulos del ERP.
 2. No respondas cultura general, recetas, deportes, política, medicina, historia, entretenimiento ni tareas externas.
 3. Si la pregunta no es del ERP, responde exactamente:
 Solo puedo responder preguntas relacionadas con la lógica de Distribuidora Solmunol.
-4. Responde en español.
-5. No inventes datos.
+4. Responde en español claro, profesional y útil para un directivo.
+5. No inventes datos. Si el ERP no registra asistencia, puntualidad, sanciones o productividad individual, dilo claramente.
 6. Usa únicamente el contexto del sistema.
-7. Si hay pocos datos, igual da una decisión, pero aclara que la precisión mejorará con más registros.
-8. No uses asteriscos ni markdown.
-9. Responde corto y fácil de entender.
-10. Usa frases directas como: "debes", "la decisión es", "se debe", "conviene".
-11. Cuando analices empleados, no ordenes despidos, multas o sanciones definitivas. Recomienda acciones prudentes como capacitación, seguimiento, advertencia documentada, revisión por Talento Humano, evaluación de desempeño o revisión según reglamento interno.
-12. Si no existen métricas suficientes del empleado, aclara que el ERP aún no registra asistencia, puntualidad o productividad individual suficiente y recomienda crear seguimiento.
-13. Termina siempre con: Fin de recomendación.
+7. No uses asteriscos ni markdown.
+8. No des respuestas cortadas ni demasiado breves. Debes dar una recomendación completa.
+9. Cuando analices empleados, no ordenes despidos, multas ni sanciones definitivas. Puedes recomendar revisión por Talento Humano, seguimiento, capacitación, advertencia documentada, actualización de datos, plan de mejora o revisión según reglamento interno.
+10. Las decisiones laborales deben ser preventivas y sustentadas en datos. Si falta evidencia, recomienda recopilarla antes de sancionar.
+11. Termina siempre con: Fin de recomendación.
+
+Formato obligatorio para preguntas sobre empleados o talento humano:
+
+Análisis del empleado:
+Indica el nombre, cargo, departamento, estado, fecha de ingreso y sueldo si están disponibles.
+
+Hallazgos del sistema:
+Menciona los datos reales encontrados. Si no hay asistencia, sanciones, atrasos o productividad individual registrada, dilo sin inventar.
+
+Nivel de riesgo:
+Clasifica como Bajo, Medio o Alto y justifica brevemente.
+Bajo: no hay anomalías relevantes registradas.
+Medio: hay datos incompletos, inconsistencias o necesidad de seguimiento.
+Alto: hay estado suspendido/inactivo o señales administrativas importantes registradas.
+
+Recomendación administrativa:
+Indica qué conviene hacer: seguimiento, capacitación, revisión con Talento Humano, actualización de datos, advertencia documentada o plan de mejora.
+
+Plan de acción:
+Da de 3 a 5 acciones concretas para la empresa.
+
+Decisión sugerida:
+Resume la decisión más prudente. No recomiendes despido o multa directa sin evidencia suficiente.
+
+Fin de recomendación.
+
+Formato obligatorio para preguntas generales del ERP:
+
+Diagnóstico:
+Resume el estado del módulo consultado con datos del ERP.
+
+Decisión principal:
+Indica la decisión concreta.
+
+Motivo:
+Explica el motivo con datos.
+
+Acción inmediata:
+Indica qué hacer ahora.
+
+Qué evitar:
+Indica qué no hacer.
+
+Dato a vigilar:
+Indica el indicador que debe revisarse.
+
+Fin de recomendación.
 
 Contexto del ERP:
 {$contexto}
@@ -68,25 +110,6 @@ Decisiones automáticas calculadas:
 
 Pregunta del usuario:
 {$pregunta}
-
-Responde exactamente así:
-
-Decisión principal:
-Escribe la decisión clara.
-
-Motivo:
-Explica por qué en una frase.
-
-Acción inmediata:
-Di qué debe hacer ahora.
-
-Qué evitar:
-Di qué no debe hacer.
-
-Dato a vigilar:
-Indica qué dato debe revisar.
-
-Fin de recomendación.
 PROMPT;
 
         try {
@@ -109,7 +132,7 @@ PROMPT;
                     ],
                     'generationConfig' => [
                         'temperature' => 0.1,
-                        'maxOutputTokens' => 700,
+                        'maxOutputTokens' => 1400,
                     ],
                 ]);
 
@@ -130,6 +153,13 @@ PROMPT;
             }
 
             $texto = $this->limpiarTextoIa($texto);
+
+            if ($this->esPreguntaTalentoHumano($pregunta) && mb_strlen($texto, 'UTF-8') < 350) {
+                return $this->respuestaLocalTalentoHumanoDetallada(
+                    $pregunta,
+                    'La respuesta de Google AI fue demasiado corta para una decisión de Talento Humano. El ERP generó un análisis directivo más completo con los datos registrados.'
+                );
+            }
 
             if (! str_contains($texto, 'Fin de recomendación.')) {
                 $texto .= "\nFin de recomendación.";
@@ -729,6 +759,190 @@ TXT;
         $decisiones[] = 'No aplicar sanciones sin evidencia registrada en el sistema y revisión de Talento Humano.';
 
         return $decisiones;
+    }
+
+    private function respuestaLocalTalentoHumanoDetallada(string $pregunta, string $motivoFallback): string
+    {
+        $empleado = $this->buscarEmpleadoMencionado($pregunta);
+
+        if (! $empleado) {
+            return <<<TXT
+Análisis de talento humano:
+No se detectó un empleado específico en la pregunta. Para un análisis individual, escriba el nombre completo, apellido, cédula o código del empleado.
+
+Hallazgos del sistema:
+El ERP tiene registrado el módulo de empleados, pero para esta pregunta no se identificó una persona concreta. Además, el sistema no registra todavía asistencia, puntualidad, sanciones históricas ni productividad individual por empleado.
+
+Nivel de riesgo:
+Medio. El riesgo no se debe a una falta comprobada, sino a que no hay suficiente información individual para tomar una decisión laboral firme.
+
+Recomendación administrativa:
+Se debe seleccionar un empleado específico y revisar su cargo, departamento, estado, fecha de ingreso y observaciones internas antes de tomar una decisión.
+
+Plan de acción:
+1. Buscar al empleado por nombre, cédula o código.
+2. Verificar que cargo y departamento coincidan con sus funciones reales.
+3. Registrar evidencias de desempeño, asistencia, errores o cumplimiento.
+4. Revisar el caso con Talento Humano.
+5. Volver a consultar a la IA cuando existan datos más completos.
+
+Decisión sugerida:
+No aplicar sanciones ni decisiones definitivas todavía. La decisión prudente es completar información y abrir seguimiento administrativo.
+
+Fin de recomendación.
+TXT;
+        }
+
+        $nombreCompleto = trim("{$empleado->nombres} {$empleado->apellidos}");
+        $fechaIngreso = $this->formatearFecha($empleado->fecha_ingreso);
+        $antiguedad = 'No calculada';
+
+        try {
+            if ($empleado->fecha_ingreso) {
+                $dias = Carbon::parse($empleado->fecha_ingreso)->diffInDays(now());
+                $antiguedad = "{$dias} días aproximadamente";
+            }
+        } catch (\Throwable $e) {
+            $antiguedad = 'No calculada';
+        }
+
+        $evaluacion = $this->evaluarEmpleadoParaDecision($empleado);
+        $hallazgos = implode("\n", $evaluacion['hallazgos']);
+        $plan = implode("\n", $evaluacion['plan']);
+
+        return <<<TXT
+Análisis del empleado:
+Empleado: {$nombreCompleto}
+Código: {$empleado->codigo_empleado}
+Cédula: {$empleado->cedula}
+Cargo: {$empleado->cargo}
+Departamento: {$empleado->departamento}
+Estado: {$empleado->estado}
+Fecha de ingreso: {$fechaIngreso}
+Antigüedad: {$antiguedad}
+Sueldo registrado: {$empleado->sueldo}
+
+Hallazgos del sistema:
+{$hallazgos}
+El ERP no registra todavía asistencia, puntualidad, sanciones históricas, atrasos ni productividad individual directa. Por eso no se debe concluir una falta grave sin evidencia adicional.
+
+Nivel de riesgo:
+{$evaluacion['riesgo']}. {$evaluacion['motivo_riesgo']}
+
+Recomendación administrativa:
+{$evaluacion['recomendacion']}
+
+Plan de acción:
+{$plan}
+
+Decisión sugerida:
+{$evaluacion['decision']}
+
+Fin de recomendación.
+TXT;
+    }
+
+    private function evaluarEmpleadoParaDecision(Empleado $empleado): array
+    {
+        $estado = trim((string) $empleado->estado);
+        $cargo = mb_strtolower(trim((string) $empleado->cargo), 'UTF-8');
+        $departamento = mb_strtolower(trim((string) $empleado->departamento), 'UTF-8');
+
+        $hallazgos = [];
+        $plan = [];
+
+        $hallazgos[] = "El empleado está registrado con estado {$empleado->estado}.";
+        $hallazgos[] = "El cargo registrado es {$empleado->cargo} y el departamento registrado es {$empleado->departamento}.";
+
+        $inconsistenciaCargoDepartamento = $this->hayInconsistenciaCargoDepartamento($cargo, $departamento);
+
+        if ($inconsistenciaCargoDepartamento) {
+            $hallazgos[] = 'Se detecta una posible inconsistencia entre cargo y departamento. Esto no representa una falta del empleado, pero sí requiere revisión administrativa.';
+        } else {
+            $hallazgos[] = 'No se detecta una inconsistencia evidente entre cargo y departamento con los datos disponibles.';
+        }
+
+        if ($estado === 'Suspendido') {
+            $riesgo = 'Alto';
+            $motivo = 'El empleado figura como suspendido, por lo que requiere revisión formal antes de asignarle nuevas responsabilidades.';
+            $recomendacion = 'Revisar el caso con Talento Humano, documentar el motivo de la suspensión y verificar si corresponde mantenerla, levantarla o aplicar un plan de mejora.';
+            $decision = 'No asignar nuevas responsabilidades hasta que Talento Humano revise y documente el caso.';
+            $plan = [
+                '1. Revisar el motivo administrativo de la suspensión.',
+                '2. Verificar evidencias y documentos relacionados con el caso.',
+                '3. Citar al empleado o responsable de área para aclaración.',
+                '4. Definir si corresponde seguimiento, capacitación o medida disciplinaria según reglamento.',
+                '5. Actualizar el estado del empleado en el sistema.',
+            ];
+        } elseif (in_array($estado, ['Inactivo', 'Retirado'], true)) {
+            $riesgo = 'Alto';
+            $motivo = "El empleado figura como {$estado}, por lo que no debe considerarse operativo.";
+            $recomendacion = 'Validar que no tenga responsabilidades activas, accesos al sistema o tareas pendientes.';
+            $decision = 'Excluirlo de actividades operativas y revisar cierre administrativo.';
+            $plan = [
+                '1. Confirmar su estado laboral real.',
+                '2. Retirar accesos operativos si corresponde.',
+                '3. Revisar tareas pendientes asociadas al empleado.',
+                '4. Actualizar registros de Talento Humano.',
+                '5. Mantener evidencia documental del cambio de estado.',
+            ];
+        } elseif ($inconsistenciaCargoDepartamento) {
+            $riesgo = 'Medio';
+            $motivo = 'Existe una posible inconsistencia de datos entre cargo y departamento, pero no hay evidencia de incumplimiento laboral.';
+            $recomendacion = 'Revisar si el cargo corresponde a las funciones reales del empleado y corregir el registro si fue un error de digitación.';
+            $decision = 'Aplicar revisión administrativa y seguimiento, no sanción.';
+            $plan = [
+                '1. Confirmar con el responsable de área las funciones reales del empleado.',
+                '2. Corregir cargo o departamento si el dato está mal registrado.',
+                '3. Definir responsabilidades medibles para los próximos 30 días.',
+                '4. Registrar observaciones de cumplimiento en Talento Humano.',
+                '5. Reevaluar después del periodo de seguimiento.',
+            ];
+        } else {
+            $riesgo = 'Bajo';
+            $motivo = 'El empleado está activo y no se observan anomalías críticas con los datos disponibles.';
+            $recomendacion = 'Mantenerlo activo y crear indicadores de seguimiento para evaluar mejor su desempeño.';
+            $decision = 'Continuar con seguimiento normal y no aplicar sanción.';
+            $plan = [
+                '1. Mantener al empleado en sus funciones actuales.',
+                '2. Registrar asistencia, puntualidad y cumplimiento de tareas.',
+                '3. Definir metas por cargo o departamento.',
+                '4. Revisar desempeño al cierre del mes.',
+                '5. Considerar capacitación solo si aparecen errores repetidos.',
+            ];
+        }
+
+        return [
+            'riesgo' => $riesgo,
+            'motivo_riesgo' => $motivo,
+            'hallazgos' => $hallazgos,
+            'recomendacion' => $recomendacion,
+            'plan' => $plan,
+            'decision' => $decision,
+        ];
+    }
+
+    private function hayInconsistenciaCargoDepartamento(string $cargo, string $departamento): bool
+    {
+        $reglas = [
+            ['cargos' => ['vendedor', 'ventas', 'cajero', 'comercial'], 'departamentos' => ['ventas', 'comercial']],
+            ['cargos' => ['bodeguero', 'bodega', 'inventario', 'almacen', 'almacén'], 'departamentos' => ['bodega', 'logistica', 'logística', 'inventario']],
+            ['cargos' => ['contador', 'contable', 'financiero'], 'departamentos' => ['contabilidad', 'finanzas', 'administracion', 'administración']],
+            ['cargos' => ['sistemas', 'soporte', 'tecnico', 'técnico', 'programador'], 'departamentos' => ['sistemas', 'tecnologia', 'tecnología', 'ti']],
+            ['cargos' => ['recursos humanos', 'talento humano', 'rrhh'], 'departamentos' => ['talento humano', 'recursos humanos', 'rrhh']],
+        ];
+
+        foreach ($reglas as $regla) {
+            $cargoCoincide = collect($regla['cargos'])->contains(fn ($palabra) => str_contains($cargo, $palabra));
+
+            if ($cargoCoincide) {
+                $departamentoCoincide = collect($regla['departamentos'])->contains(fn ($palabra) => str_contains($departamento, $palabra));
+
+                return ! $departamentoCoincide;
+            }
+        }
+
+        return false;
     }
 
     private function respuestaLocalDirectiva(string $motivoFallback, string $pregunta = ''): string
