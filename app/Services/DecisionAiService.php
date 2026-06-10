@@ -19,7 +19,7 @@ class DecisionAiService
         $pregunta = trim($pregunta);
 
         if (! $this->preguntaPermitida($pregunta)) {
-            return 'Solo puedo responder preguntas relacionadas con la lógica del Distribuidora Solmunol.';
+            return 'Solo puedo responder preguntas relacionadas con la lógica de Distribuidora Solmunol.';
         }
 
         $apiKey = config('services.google_ai.api_key');
@@ -27,26 +27,28 @@ class DecisionAiService
 
         if (! $apiKey) {
             return $this->respuestaLocalDirectiva(
-                'No se encontró la API key de Google AI, pero el ERP generó una decisión automática con los datos registrados.'
+                'No se encontró la API key de Google AI, pero el ERP generó una decisión automática con los datos registrados.',
+                $pregunta
             );
         }
 
-        $contexto = $this->generarContextoSistema();
-        $decisionesAutomaticas = $this->generarDecisionesAutomaticas();
+        $contexto = $this->generarContextoSistema($pregunta);
+        $decisionesAutomaticas = $this->generarDecisionesAutomaticas($pregunta);
 
         $prompt = <<<PROMPT
-Eres el asistente directivo inteligente del Distribuidora Solmunol.
+Eres el asistente directivo inteligente de Distribuidora Solmunol.
 
 Tu función es ayudar a tomar decisiones concretas para mejorar la empresa usando los datos reales del ERP.
+Puedes analizar compras, ventas, productos, stock, bodega, clientes, proveedores, reportes, dashboard directivo, empleados, talento humano, desempeño laboral, anomalías administrativas y toma de decisiones empresariales.
 
 No eres un asistente de ideas generales.
 Debes decir qué decisión tomar, qué acción hacer y qué evitar.
 
 Reglas:
-1. Solo responde preguntas relacionadas con el Distribuidora Solmunol.
+1. Solo responde preguntas relacionadas con Distribuidora Solmunol y sus módulos del ERP.
 2. No respondas cultura general, recetas, deportes, política, medicina, historia, entretenimiento ni tareas externas.
 3. Si la pregunta no es del ERP, responde exactamente:
-Solo puedo responder preguntas relacionadas con la lógica del Distribuidora Solmunol.
+Solo puedo responder preguntas relacionadas con la lógica de Distribuidora Solmunol.
 4. Responde en español.
 5. No inventes datos.
 6. Usa únicamente el contexto del sistema.
@@ -54,7 +56,9 @@ Solo puedo responder preguntas relacionadas con la lógica del Distribuidora Sol
 8. No uses asteriscos ni markdown.
 9. Responde corto y fácil de entender.
 10. Usa frases directas como: "debes", "la decisión es", "se debe", "conviene".
-11. Termina siempre con: Fin de recomendación.
+11. Cuando analices empleados, no ordenes despidos, multas o sanciones definitivas. Recomienda acciones prudentes como capacitación, seguimiento, advertencia documentada, revisión por Talento Humano, evaluación de desempeño o revisión según reglamento interno.
+12. Si no existen métricas suficientes del empleado, aclara que el ERP aún no registra asistencia, puntualidad o productividad individual suficiente y recomienda crear seguimiento.
+13. Termina siempre con: Fin de recomendación.
 
 Contexto del ERP:
 {$contexto}
@@ -111,7 +115,8 @@ PROMPT;
 
             if (! $response->successful()) {
                 return $this->respuestaLocalDirectiva(
-                    'Google AI no respondió correctamente, pero el ERP generó una decisión automática con los datos actuales.'
+                    'Google AI no respondió correctamente, pero el ERP generó una decisión automática con los datos actuales.',
+                    $pregunta
                 );
             }
 
@@ -119,7 +124,8 @@ PROMPT;
 
             if (! $texto) {
                 return $this->respuestaLocalDirectiva(
-                    'Google AI no generó texto válido, pero el ERP calculó una decisión automática.'
+                    'Google AI no generó texto válido, pero el ERP calculó una decisión automática.',
+                    $pregunta
                 );
             }
 
@@ -132,7 +138,8 @@ PROMPT;
             return $texto;
         } catch (\Throwable $e) {
             return $this->respuestaLocalDirectiva(
-                'No se pudo conectar con Google AI, pero el ERP generó una decisión automática con los datos registrados.'
+                'No se pudo conectar con Google AI, pero el ERP generó una decisión automática con los datos registrados.',
+                $pregunta
             );
         }
     }
@@ -183,7 +190,7 @@ PROMPT;
 
         $palabrasPermitidas = [
             'erp',
-            'solis',
+            'solmunol',
             'sistema',
             'módulo',
             'modulo',
@@ -199,8 +206,6 @@ PROMPT;
             'kardex',
             'movimiento',
             'movimientos',
-            'empleado',
-            'empleados',
             'cliente',
             'clientes',
             'proveedor',
@@ -277,6 +282,53 @@ PROMPT;
             'urgente',
             'controlar',
             'optimizar',
+
+            // Talento humano y empleados
+            'empleado',
+            'empleados',
+            'talento humano',
+            'personal',
+            'trabajador',
+            'trabajadores',
+            'colaborador',
+            'colaboradores',
+            'desempeño',
+            'desempeno',
+            'responsabilidad',
+            'responsabilidades',
+            'cumpliendo',
+            'cumplimiento',
+            'productividad',
+            'rendimiento',
+            'anomalía',
+            'anomalia',
+            'anomalías',
+            'anomalias',
+            'sanción',
+            'sancion',
+            'sanciones',
+            'advertencia',
+            'llamado de atención',
+            'llamado de atencion',
+            'capacitación',
+            'capacitacion',
+            'multa',
+            'despido',
+            'despedir',
+            'contrato',
+            'cargo',
+            'área',
+            'area',
+            'departamento',
+            'asistencia',
+            'atrasos',
+            'puntualidad',
+            'plan de mejora',
+            'evaluación',
+            'evaluacion',
+            'seguimiento',
+            'talento',
+            'humano',
         ];
 
         foreach ($palabrasPermitidas as $palabra) {
@@ -285,10 +337,26 @@ PROMPT;
             }
         }
 
-        return false;
+        try {
+            return Empleado::query()
+                ->select(['codigo_empleado', 'nombres', 'apellidos'])
+                ->limit(300)
+                ->get()
+                ->contains(function (Empleado $empleado) use ($texto) {
+                    $nombreCompleto = mb_strtolower(trim("{$empleado->nombres} {$empleado->apellidos}"), 'UTF-8');
+                    $primerNombre = mb_strtolower(trim((string) explode(' ', (string) $empleado->nombres)[0]), 'UTF-8');
+                    $codigo = mb_strtolower((string) $empleado->codigo_empleado, 'UTF-8');
+
+                    return ($nombreCompleto !== '' && str_contains($texto, $nombreCompleto))
+                        || ($primerNombre !== '' && str_contains($texto, $primerNombre))
+                        || ($codigo !== '' && str_contains($texto, $codigo));
+                });
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
-    private function generarContextoSistema(): string
+    private function generarContextoSistema(string $pregunta = ''): string
     {
         $totalCompras = round((float) Compra::sum('total'), 2);
         $totalVentas = round((float) Venta::sum('total'), 2);
@@ -411,6 +479,8 @@ PROMPT;
             })
             ->implode("\n");
 
+        $resumenEmpleados = $this->generarContextoTalentoHumano($pregunta);
+
         if ($productosCriticos === '') {
             $productosCriticos = 'No hay productos críticos.';
         }
@@ -440,6 +510,9 @@ Productos activos: {$productosActivos}
 Productos bajo stock: {$productosBajoStock}
 Productos sin stock: {$productosSinStock}
 
+Talento humano:
+{$resumenEmpleados}
+
 Movimientos de bodega:
 Entradas: {$entradas}
 Salidas: {$salidas}
@@ -463,9 +536,85 @@ Productos más vendidos:
 CTX;
     }
 
-    private function generarDecisionesAutomaticas(): string
+    private function generarContextoTalentoHumano(string $pregunta = ''): string
+    {
+        $totalEmpleados = Empleado::count();
+        $empleadosActivos = Empleado::where('estado', 'Activo')->count();
+        $empleadosSuspendidos = Empleado::where('estado', 'Suspendido')->count();
+        $empleadosInactivos = Empleado::whereIn('estado', ['Inactivo', 'Retirado'])->count();
+
+        $porDepartamento = Empleado::query()
+            ->selectRaw('departamento, COUNT(*) as total')
+            ->groupBy('departamento')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($fila) => "{$fila->departamento}: {$fila->total}")
+            ->implode("\n");
+
+        $porCargo = Empleado::query()
+            ->selectRaw('cargo, COUNT(*) as total')
+            ->groupBy('cargo')
+            ->orderByDesc('total')
+            ->get()
+            ->map(fn ($fila) => "{$fila->cargo}: {$fila->total}")
+            ->implode("\n");
+
+        $empleadosNoActivos = Empleado::whereIn('estado', ['Suspendido', 'Inactivo', 'Retirado'])
+            ->orderBy('estado')
+            ->limit(10)
+            ->get()
+            ->map(function (Empleado $empleado) {
+                return "{$empleado->codigo_empleado} - {$empleado->nombres} {$empleado->apellidos}: {$empleado->cargo}, {$empleado->departamento}, estado {$empleado->estado}";
+            })
+            ->implode("\n");
+
+        $empleadoMencionado = $this->buscarEmpleadoMencionado($pregunta);
+        $detalleEmpleado = $empleadoMencionado
+            ? $this->formatearDetalleEmpleado($empleadoMencionado)
+            : 'No se detectó un empleado específico en la pregunta. Para análisis individual, incluya nombre, apellido o código del empleado.';
+
+        if ($porDepartamento === '') {
+            $porDepartamento = 'No hay empleados registrados por departamento.';
+        }
+
+        if ($porCargo === '') {
+            $porCargo = 'No hay empleados registrados por cargo.';
+        }
+
+        if ($empleadosNoActivos === '') {
+            $empleadosNoActivos = 'No hay empleados suspendidos, inactivos o retirados registrados.';
+        }
+
+        return <<<TXT
+Total de empleados: {$totalEmpleados}
+Empleados activos: {$empleadosActivos}
+Empleados suspendidos: {$empleadosSuspendidos}
+Empleados inactivos o retirados: {$empleadosInactivos}
+
+Empleados por departamento:
+{$porDepartamento}
+
+Empleados por cargo:
+{$porCargo}
+
+Empleados con estado no activo:
+{$empleadosNoActivos}
+
+Empleado mencionado:
+{$detalleEmpleado}
+
+Limitación importante:
+El ERP registra datos laborales básicos del empleado, pero no registra todavía asistencia, puntualidad, sanciones históricas, productividad individual por empleado ni cumplimiento de tareas. Las decisiones de talento humano deben tomarse como recomendación preventiva y revisarse con Talento Humano.
+TXT;
+    }
+
+    private function generarDecisionesAutomaticas(string $pregunta = ''): string
     {
         $decisiones = [];
+
+        if ($this->esPreguntaTalentoHumano($pregunta)) {
+            $decisiones = array_merge($decisiones, $this->generarDecisionesTalentoHumano($pregunta));
+        }
 
         $totalCompras = (float) Compra::sum('total');
         $totalVentas = (float) Venta::sum('total');
@@ -518,32 +667,95 @@ CTX;
         }
 
         if ($resultadoEstimado < 0) {
-            $decisiones[] = "No aumentar compras generales. Se debe vender primero el inventario actual.";
+            $decisiones[] = 'No aumentar compras generales. Se debe vender primero el inventario actual.';
         } elseif ($resultadoEstimado > 0) {
-            $decisiones[] = "Reinvertir solo en productos con mayor salida. Evitar compras innecesarias.";
+            $decisiones[] = 'Reinvertir solo en productos con mayor salida. Evitar compras innecesarias.';
         } else {
-            $decisiones[] = "Registrar más ventas y compras antes de tomar decisiones grandes.";
+            $decisiones[] = 'Registrar más ventas y compras antes de tomar decisiones grandes.';
         }
 
         if ($totalVentas <= 0) {
-            $decisiones[] = "Registrar ventas reales antes de hacer predicciones.";
+            $decisiones[] = 'Registrar ventas reales antes de hacer predicciones.';
         }
 
         if ($totalCompras <= 0) {
-            $decisiones[] = "Registrar compras reales para calcular costos e inventario.";
+            $decisiones[] = 'Registrar compras reales para calcular costos e inventario.';
         }
 
         if (empty($decisiones)) {
-            $decisiones[] = "Mantener control semanal de ventas, compras y stock.";
+            $decisiones[] = 'Mantener control semanal de ventas, compras, stock y talento humano.';
         }
 
         return implode("\n", $decisiones);
     }
 
-    private function respuestaLocalDirectiva(string $motivoFallback): string
+    private function generarDecisionesTalentoHumano(string $pregunta): array
     {
-        $decisiones = $this->generarDecisionesAutomaticas();
-        $lineaPrincipal = strtok($decisiones, "\n") ?: 'Mantener control semanal de ventas, compras y stock.';
+        $decisiones = [];
+        $empleado = $this->buscarEmpleadoMencionado($pregunta);
+
+        if ($empleado) {
+            $nombreCompleto = trim("{$empleado->nombres} {$empleado->apellidos}");
+            $estado = (string) $empleado->estado;
+            $departamento = (string) $empleado->departamento;
+            $cargo = (string) $empleado->cargo;
+
+            if ($estado === 'Activo') {
+                $decisiones[] = "Mantener a {$nombreCompleto} activo, pero abrir seguimiento de desempeño de 30 días si se reportan dudas sobre sus responsabilidades.";
+            } elseif ($estado === 'Suspendido') {
+                $decisiones[] = "Revisar con Talento Humano el caso de {$nombreCompleto}, porque su estado es Suspendido antes de tomar una decisión definitiva.";
+            } elseif (in_array($estado, ['Inactivo', 'Retirado'], true)) {
+                $decisiones[] = "No asignar nuevas responsabilidades a {$nombreCompleto}, porque su estado actual es {$estado}.";
+            }
+
+            $decisiones[] = "Evaluar a {$nombreCompleto} según cargo {$cargo} y departamento {$departamento}, comparando tareas asignadas, registros y cumplimiento.";
+            $decisiones[] = "No recomendar despido ni multa automática para {$nombreCompleto}; primero documentar evidencia, errores, asistencias y productividad.";
+
+            return $decisiones;
+        }
+
+        $suspendidos = Empleado::where('estado', 'Suspendido')->count();
+        $noActivos = Empleado::whereIn('estado', ['Inactivo', 'Retirado'])->count();
+
+        if ($suspendidos > 0) {
+            $decisiones[] = "Revisar {$suspendidos} empleado(s) suspendido(s) con Talento Humano antes de tomar decisiones definitivas.";
+        }
+
+        if ($noActivos > 0) {
+            $decisiones[] = "Separar del análisis operativo a {$noActivos} empleado(s) inactivos o retirados.";
+        }
+
+        $decisiones[] = 'Crear seguimiento mensual de desempeño para empleados activos, incluyendo asistencia, puntualidad, errores y cumplimiento de tareas.';
+        $decisiones[] = 'No aplicar sanciones sin evidencia registrada en el sistema y revisión de Talento Humano.';
+
+        return $decisiones;
+    }
+
+    private function respuestaLocalDirectiva(string $motivoFallback, string $pregunta = ''): string
+    {
+        $decisiones = $this->generarDecisionesAutomaticas($pregunta);
+        $lineaPrincipal = strtok($decisiones, "\n") ?: 'Mantener control semanal de ventas, compras, stock y talento humano.';
+
+        if ($this->esPreguntaTalentoHumano($pregunta)) {
+            return <<<TXT
+Decisión principal:
+{$lineaPrincipal}
+
+Motivo:
+{$motivoFallback} Para empleados, el ERP permite revisar datos básicos como estado, cargo, departamento, sueldo y fecha de ingreso, pero no debe decidir despidos o sanciones definitivas sin evidencia adicional.
+
+Acción inmediata:
+Revisa el estado del empleado, documenta observaciones y abre seguimiento por Talento Humano durante 30 días si existe duda de cumplimiento.
+
+Qué evitar:
+No apliques despido, multa o sanción definitiva solo por una respuesta automática de la IA.
+
+Dato a vigilar:
+Estado del empleado, cargo, departamento, asistencia, puntualidad, errores registrados y cumplimiento de responsabilidades.
+
+Fin de recomendación.
+TXT;
+        }
 
         return <<<TXT
 Decisión principal:
@@ -562,6 +774,111 @@ Dato a vigilar:
 Ventas totales, compras totales, productos bajo stock y producto más vendido.
 
 Fin de recomendación.
+TXT;
+    }
+
+    private function esPreguntaTalentoHumano(string $pregunta): bool
+    {
+        $texto = mb_strtolower($pregunta, 'UTF-8');
+
+        $palabras = [
+            'empleado',
+            'empleados',
+            'talento humano',
+            'personal',
+            'trabajador',
+            'colaborador',
+            'desempeño',
+            'desempeno',
+            'responsabilidad',
+            'responsabilidades',
+            'productividad',
+            'rendimiento',
+            'anomalía',
+            'anomalia',
+            'sanción',
+            'sancion',
+            'advertencia',
+            'capacitación',
+            'capacitacion',
+            'multa',
+            'despido',
+            'cargo',
+            'área',
+            'area',
+            'departamento',
+            'asistencia',
+            'atrasos',
+            'puntualidad',
+            'seguimiento',
+        ];
+
+        foreach ($palabras as $palabra) {
+            if (str_contains($texto, $palabra)) {
+                return true;
+            }
+        }
+
+        return $this->buscarEmpleadoMencionado($pregunta) !== null;
+    }
+
+    private function buscarEmpleadoMencionado(string $pregunta): ?Empleado
+    {
+        $texto = mb_strtolower($pregunta, 'UTF-8');
+
+        if ($texto === '') {
+            return null;
+        }
+
+        try {
+            return Empleado::query()
+                ->limit(300)
+                ->get()
+                ->first(function (Empleado $empleado) use ($texto) {
+                    $nombreCompleto = mb_strtolower(trim("{$empleado->nombres} {$empleado->apellidos}"), 'UTF-8');
+                    $nombres = mb_strtolower(trim((string) $empleado->nombres), 'UTF-8');
+                    $apellidos = mb_strtolower(trim((string) $empleado->apellidos), 'UTF-8');
+                    $primerNombre = mb_strtolower(trim((string) explode(' ', (string) $empleado->nombres)[0]), 'UTF-8');
+                    $codigo = mb_strtolower((string) $empleado->codigo_empleado, 'UTF-8');
+                    $cedula = mb_strtolower((string) $empleado->cedula, 'UTF-8');
+
+                    return ($nombreCompleto !== '' && str_contains($texto, $nombreCompleto))
+                        || ($nombres !== '' && str_contains($texto, $nombres))
+                        || ($apellidos !== '' && str_contains($texto, $apellidos))
+                        || ($primerNombre !== '' && str_contains($texto, $primerNombre))
+                        || ($codigo !== '' && str_contains($texto, $codigo))
+                        || ($cedula !== '' && str_contains($texto, $cedula));
+                });
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function formatearDetalleEmpleado(Empleado $empleado): string
+    {
+        $fechaIngreso = $this->formatearFecha($empleado->fecha_ingreso);
+        $dias = null;
+
+        try {
+            $dias = $empleado->fecha_ingreso
+                ? Carbon::parse($empleado->fecha_ingreso)->diffInDays(now())
+                : null;
+        } catch (\Throwable $e) {
+            $dias = null;
+        }
+
+        $antiguedad = $dias !== null ? "{$dias} días de antigüedad aproximada" : 'Antigüedad no calculada';
+
+        return <<<TXT
+Código: {$empleado->codigo_empleado}
+Nombre: {$empleado->nombres} {$empleado->apellidos}
+Cédula: {$empleado->cedula}
+Cargo: {$empleado->cargo}
+Departamento: {$empleado->departamento}
+Sueldo: {$empleado->sueldo}
+Fecha de ingreso: {$fechaIngreso}
+Antigüedad: {$antiguedad}
+Estado: {$empleado->estado}
 TXT;
     }
 
