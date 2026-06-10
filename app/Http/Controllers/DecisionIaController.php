@@ -13,7 +13,10 @@ class DecisionIaController extends Controller
             abort(403);
         }
 
-        if (! in_array(auth()->user()->rol, ['Administrador', 'Directivo'], true)) {
+        $usuario = auth()->user();
+        $rolUsuario = strtolower(trim((string) $usuario->rol));
+
+        if (! in_array($rolUsuario, ['administrador', 'directivo'], true)) {
             return back()->with(
                 'respuesta_ia',
                 'Solo el Administrador o el Directivo pueden usar la IA para toma de decisiones.'
@@ -21,15 +24,14 @@ class DecisionIaController extends Controller
         }
 
         $request->validate([
-            'pregunta_ia' => ['required', 'string', 'min:5', 'max:300'],
+            'pregunta_ia' => ['required', 'string', 'min:5', 'max:1200'],
         ], [
             'pregunta_ia.required' => 'Escriba una pregunta para la IA.',
             'pregunta_ia.min' => 'La pregunta debe tener al menos 5 caracteres.',
-            'pregunta_ia.max' => 'La pregunta no debe superar los 300 caracteres.',
+            'pregunta_ia.max' => 'La pregunta no debe superar los 1200 caracteres.',
         ]);
 
-        $pregunta = trim($request->input('pregunta_ia'));
-
+        $pregunta = trim((string) $request->input('pregunta_ia'));
         $respuesta = $decisionAiService->responder($pregunta);
 
         return back()

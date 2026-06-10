@@ -19,8 +19,9 @@ class AsistenteIaController extends Controller
             }
 
             $usuario = auth()->user();
+            $rolUsuario = strtolower(trim((string) $usuario->rol));
 
-            if (! in_array($usuario->rol, ['Administrador', 'Directivo'], true)) {
+            if (! in_array($rolUsuario, ['administrador', 'directivo'], true)) {
                 return response()->json([
                     'ok' => false,
                     'respuesta' => 'Solo el Administrador o el Directivo pueden usar el asistente IA para toma de decisiones.',
@@ -28,12 +29,12 @@ class AsistenteIaController extends Controller
             }
 
             $validator = Validator::make($request->all(), [
-                'pregunta_ia' => ['required', 'string', 'min:5', 'max:350'],
+                'pregunta_ia' => ['required', 'string', 'min:5', 'max:1200'],
             ], [
                 'pregunta_ia.required' => 'Escriba una pregunta para la IA.',
                 'pregunta_ia.string' => 'La pregunta debe ser texto.',
                 'pregunta_ia.min' => 'La pregunta debe tener al menos 5 caracteres.',
-                'pregunta_ia.max' => 'La pregunta no debe superar los 350 caracteres.',
+                'pregunta_ia.max' => 'La pregunta no debe superar los 1200 caracteres.',
             ]);
 
             if ($validator->fails()) {
@@ -44,7 +45,6 @@ class AsistenteIaController extends Controller
             }
 
             $pregunta = trim((string) $request->input('pregunta_ia'));
-
             $respuesta = $decisionAiService->responder($pregunta);
 
             return response()->json([
@@ -55,7 +55,7 @@ class AsistenteIaController extends Controller
         } catch (\Throwable $e) {
             return response()->json([
                 'ok' => false,
-                'respuesta' => 'Error interno del asistente IA: ' . $e->getMessage(),
+                'respuesta' => 'Error interno del asistente IA. Revise los logs del sistema si el problema continúa.',
             ], 500);
         }
     }
