@@ -1,0 +1,48 @@
+DISTRIBUIDORA SOLMUNOL - VERSIÓN MARIADB / MYSQL
+
+CAMBIO REALIZADO
+- Se cambió la conexión de PostgreSQL a MariaDB/MySQL.
+- El .env quedó con DB_CONNECTION=mysql.
+- Se usa DB_DATABASE=olmunol.
+- Se dejó SESSION_DRIVER=file, CACHE_STORE=file y QUEUE_CONNECTION=sync para evitar errores por tablas de sesión/cache/colas.
+- Se retiró la API key del .env por seguridad. Si usas el asistente IA, pega tu clave real en GOOGLE_AI_API_KEY.
+
+PASOS PARA PROBAR LOCALMENTE CON XAMPP
+1. Abrir XAMPP.
+2. Encender Apache y MySQL.
+3. Entrar a http://localhost/phpmyadmin.
+4. Crear la base de datos olmunol con collation utf8mb4_unicode_ci.
+   También puedes ejecutar database/sql/crear_bd_olmunol_mariadb.sql.
+5. Abrir terminal en la raíz del proyecto, donde está artisan.
+6. Ejecutar:
+
+   composer install
+   php artisan optimize:clear
+   php artisan config:clear
+   php artisan cache:clear
+   php artisan route:clear
+   php artisan view:clear
+   php artisan migrate:fresh --seed
+   php artisan serve
+
+7. Entrar en el navegador a:
+   http://127.0.0.1:8000/admin
+
+USUARIOS
+Administrador:
+admin@erpsolis.com
+Admin12345
+
+Directivo:
+directivo@erpsolis.com
+Directivo12345
+
+Operativo:
+operativo@erpsolis.com
+Operativo12345
+
+NOTAS PARA SUBIR EN LÍNEA
+- En hosting con MariaDB, conserva DB_CONNECTION=mysql.
+- Cambia DB_HOST, DB_DATABASE, DB_USERNAME y DB_PASSWORD por los datos del hosting.
+- No uses DB_CONNECTION=pgsql ni puertos 5432/5433.
+- Si el hosting te da MariaDB, normalmente Laravel igual usa DB_CONNECTION=mysql porque MariaDB trabaja con el driver pdo_mysql.

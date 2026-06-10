@@ -1,0 +1,32 @@
+Proyecto restaurado a configuración local/pre-Render.
+
+Cambios aplicados:
+1. Se quitó la configuración de despliegue de Render: Dockerfile, start.sh y .dockerignore.
+2. Se eliminó una carpeta anidada accidental llamada erp_solis que solo contenía otro .env.
+3. El .env volvió a modo local:
+   - APP_ENV=local
+   - APP_DEBUG=true
+   - APP_URL=http://127.0.0.1:8000
+   - DB_CONNECTION=pgsql
+   - DB_HOST=127.0.0.1
+   - DB_PORT=5433
+   - DB_DATABASE=erp_solis
+   - DB_USERNAME=postgres
+   - DB_PASSWORD=000000
+4. Se dejó SESSION_DRIVER=file, CACHE_STORE=file y QUEUE_CONNECTION=sync para evitar errores de sesiones, caché y colas durante pruebas.
+5. Se mantuvo User.php con acceso Filament por rol: Administrador, Directivo y Operativo.
+6. Se corrigió DatabaseSeeder para crear usuarios por rol con UsuariosRolesSeeder.
+
+Usuarios del sistema si ejecutas php artisan db:seed:
+- admin@erpsolis.com / Admin12345
+- directivo@erpsolis.com / Directivo12345
+- operativo@erpsolis.com / Operativo12345
+
+Comandos para usar desde la raíz del proyecto:
+php artisan optimize:clear
+php artisan config:clear
+php artisan cache:clear
+php artisan route:clear
+php artisan view:clear
+php artisan migrate --seed
+php artisan serve

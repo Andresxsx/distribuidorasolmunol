@@ -1,0 +1,79 @@
+:root {
+    --erp-sidebar-bg: #0f172a;
+    --erp-sidebar-bg-2: #1e293b;
+    --erp-content-bg: #f8fafc;
+    --erp-card-bg: #ffffff;
+    --erp-border: #e2e8f0;
+    --erp-text: #0f172a;
+    --erp-text-muted: #64748b;
+    --erp-primary: #1d4ed8;
+    --erp-success: #16a34a;
+    --erp-warning: #d97706;
+    --erp-danger: #dc2626;
+}
+
+body {
+    background: var(--erp-content-bg);
+}
+
+.fi-sidebar {
+    background: linear-gradient(180deg, var(--erp-sidebar-bg), var(--erp-sidebar-bg-2));
+}
+
+.fi-sidebar-nav {
+    background: transparent;
+}
+
+.fi-sidebar-item a {
+    border-radius: 12px;
+    margin: 4px 8px;
+}
+
+.fi-sidebar-item-active a {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-left: 4px solid var(--erp-primary);
+}
+
+.fi-topbar {
+    background: #ffffff;
+    border-bottom: 1px solid var(--erp-border);
+}
+
+.fi-main {
+    background: var(--erp-content-bg);
+}
+
+.fi-section,
+.fi-card,
+.fi-ta,
+.fi-fo-field-wrp {
+    border-radius: 16px !important;
+}
+
+.fi-section,
+.fi-card {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    border: 1px solid var(--erp-border);
+    background: white;
+}
+
+.fi-btn {
+    border-radius: 12px !important;
+}
+
+.fi-btn-color-primary {
+    background-color: var(--erp-primary) !important;
+}
+
+.fi-ta-table thead tr {
+    background: #f1f5f9;
+}
+
+.fi-ta-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.fi-badge {
+    border-radius: 999px !important;
+    font-weight: 700;
+}

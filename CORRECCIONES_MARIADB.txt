@@ -1,0 +1,23 @@
+Proyecto convertido a MariaDB/MySQL.
+
+Cambios aplicados:
+1. .env cambiado de PostgreSQL a MariaDB/MySQL.
+2. .env.example cambiado de PostgreSQL a MariaDB/MySQL.
+3. config/database.php corregido para usar \PDO::MYSQL_ATTR_SSL_CA en lugar de Pdo\Mysql.
+4. Se agregó database/sql/crear_bd_olmunol_mariadb.sql.
+5. Se agregó INSTRUCCIONES_MARIADB.txt con pasos de prueba local y preparación para hosting.
+6. Se dejó SESSION_DRIVER=file, CACHE_STORE=file y QUEUE_CONNECTION=sync.
+7. Se mantuvieron los usuarios por rol en UsuariosRolesSeeder.
+
+Usuarios al ejecutar php artisan migrate:fresh --seed:
+- admin@erpsolis.com / Admin12345
+- directivo@erpsolis.com / Directivo12345
+- operativo@erpsolis.com / Operativo12345
+
+Base local recomendada:
+- Motor: MariaDB/MySQL
+- Base: olmunol
+- Host: 127.0.0.1
+- Puerto: 3306
+- Usuario: root
+- Contraseña: vacía en XAMPP
