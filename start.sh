@@ -17,7 +17,6 @@ chmod -R 775 storage bootstrap/cache public
 php artisan optimize:clear || true
 
 php artisan migrate --force
-php artisan db:seed --force || true
 
 php artisan filament:assets || true
 
