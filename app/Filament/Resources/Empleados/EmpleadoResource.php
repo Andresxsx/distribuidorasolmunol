@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Filament\Resources\Empleados;
+
 use App\Filament\Resources\Concerns\ControlaPermisosPorRol;
 use App\Filament\Resources\Empleados\Pages\CreateEmpleado;
 use App\Filament\Resources\Empleados\Pages\EditEmpleado;
@@ -8,11 +9,13 @@ use App\Filament\Resources\Empleados\Pages\ListEmpleados;
 use App\Filament\Resources\Empleados\Pages\ViewEmpleado;
 use App\Filament\Resources\Empleados\Schemas\EmpleadoInfolist;
 use App\Filament\Resources\Empleados\Tables\EmpleadosTable;
+use App\Models\Cargo;
 use App\Models\Empleado;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
@@ -20,6 +23,7 @@ use Filament\Tables\Table;
 class EmpleadoResource extends Resource
 {
     use ControlaPermisosPorRol;
+
     protected static ?string $model = Empleado::class;
 
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-identification';
@@ -34,7 +38,8 @@ class EmpleadoResource extends Resource
 
     protected static ?string $slug = 'empleados';
 
-protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
+    protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
+
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
@@ -65,7 +70,7 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
                             return function (string $attribute, $value, \Closure $fail): void {
                                 $cedula = preg_replace('/\D/', '', (string) $value);
 
-                                if (! self::validarCedulaEcuador($cedula)) {
+                                if (! Empleado::validarCedulaEcuador($cedula)) {
                                     $fail('La cédula ingresada no es válida para Ecuador.');
                                 }
                             };
@@ -79,61 +84,59 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
                     ->required()
                     ->minLength(2)
                     ->maxLength(80)
-                    ->extraInputAttributes([
-                        'maxlength' => 80,
-                    ])
-                    ->rules([
-                        'required',
-                        'regex:/^[\pL\s]+$/u',
-                    ])
-                    ->helperText('Solo letras y espacios. Ejemplo: Javier Andrés.'),
+                    ->rules(['required', 'regex:/^[\pL\s]+$/u'])
+                    ->helperText('Solo letras y espacios.'),
 
                 TextInput::make('apellidos')
                     ->label('Apellidos')
                     ->required()
                     ->minLength(2)
                     ->maxLength(80)
-                    ->extraInputAttributes([
-                        'maxlength' => 80,
-                    ])
-                    ->rules([
-                        'required',
-                        'regex:/^[\pL\s]+$/u',
-                    ])
-                    ->helperText('Solo letras y espacios. Ejemplo: Carranza Vera.'),
+                    ->rules(['required', 'regex:/^[\pL\s]+$/u'])
+                    ->helperText('Solo letras y espacios.'),
 
-                Select::make('cargo')
+                Select::make('cargo_id')
                     ->label('Cargo')
                     ->required()
-                    ->options([
-                        'Gerente' => 'Gerente',
-                        'Administrador' => 'Administrador',
-                        'Vendedor' => 'Vendedor',
-                        'Bodeguero' => 'Bodeguero',
-                        'Comprador' => 'Comprador',
-                        'Contador' => 'Contador',
-                        'Asistente administrativo' => 'Asistente administrativo',
-                        'Jefe de talento humano' => 'Jefe de talento humano',
-                        'Analista de sistemas' => 'Analista de sistemas',
-                    ])
+                    ->options(fn () => Cargo::where('estado', 'Activo')
+                        ->orderBy('nombre')
+                        ->get()
+                        ->mapWithKeys(fn (Cargo $cargo) => [
+                            $cargo->id => "{$cargo->nombre} - {$cargo->departamento} ($" . number_format((float) $cargo->salario_base, 2) . ")",
+                        ])
+                        ->toArray())
                     ->searchable()
-                    ->helperText('Seleccione un cargo válido.'),
+                    ->live()
+                    ->afterStateUpdated(function ($state, $set): void {
+                        $cargo = Cargo::find($state);
 
-                Select::make('departamento')
+                        if ($cargo) {
+                            $set('cargo', $cargo->nombre);
+                            $set('departamento', $cargo->departamento);
+                            $set('sueldo', $cargo->salario_base);
+                        }
+                    })
+                    ->helperText('El cargo define automáticamente departamento y salario base.'),
+
+                TextInput::make('cargo')
+                    ->label('Cargo asignado')
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('Se asigna automáticamente desde el catálogo de cargos.'),
+
+                TextInput::make('departamento')
                     ->label('Departamento')
-                    ->required()
-                    ->options([
-                        'Dirección' => 'Dirección',
-                        'Administración' => 'Administración',
-                        'Talento Humano' => 'Talento Humano',
-                        'Bodega' => 'Bodega',
-                        'Compras' => 'Compras',
-                        'Ventas' => 'Ventas',
-                        'Contabilidad' => 'Contabilidad',
-                        'Sistemas' => 'Sistemas',
-                    ])
-                    ->searchable()
-                    ->helperText('Seleccione el departamento del empleado.'),
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('Se asigna automáticamente desde el cargo.'),
+
+                TextInput::make('sueldo')
+                    ->label('Salario base')
+                    ->numeric()
+                    ->prefix('$')
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('No se edita manualmente. Depende del cargo seleccionado.'),
 
                 TextInput::make('telefono')
                     ->label('Celular')
@@ -145,10 +148,7 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
                         'maxlength' => 10,
                         'oninput' => "this.value = this.value.replace(/[^0-9]/g, '').slice(0, 10)",
                     ])
-                    ->rules([
-                        'required',
-                        'regex:/^09[0-9]{8}$/',
-                    ])
+                    ->rules(['required', 'regex:/^09[0-9]{8}$/'])
                     ->helperText('Debe ser un celular ecuatoriano válido. Ejemplo: 0993050589.'),
 
                 TextInput::make('correo')
@@ -156,22 +156,7 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
                     ->required()
                     ->email()
                     ->maxLength(100)
-                    ->extraInputAttributes([
-                        'maxlength' => 100,
-                    ])
                     ->helperText('Ejemplo: empleado@empresa.com'),
-
-                TextInput::make('sueldo')
-                    ->label('Sueldo')
-                    ->required()
-                    ->numeric()
-                    ->minValue(0.01)
-                    ->prefix('$')
-                    ->extraInputAttributes([
-                        'min' => 0.01,
-                        'step' => '0.01',
-                    ])
-                    ->helperText('El sueldo debe ser mayor a cero.'),
 
                 DatePicker::make('fecha_ingreso')
                     ->label('Fecha de ingreso')
@@ -190,6 +175,42 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
                         'Retirado' => 'Retirado',
                     ])
                     ->default('Activo'),
+
+                Toggle::make('tiene_seguro')
+                    ->label('Tiene seguro')
+                    ->live()
+                    ->helperText('Actívelo si el empleado tiene seguro IESS o privado.'),
+
+                Select::make('tipo_seguro')
+                    ->label('Tipo de seguro')
+                    ->options([
+                        'IESS' => 'IESS',
+                        'Privado' => 'Privado',
+                    ])
+                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
+                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
+
+                TextInput::make('numero_afiliacion')
+                    ->label('Número de afiliación')
+                    ->maxLength(80)
+                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro')),
+
+                Select::make('estado_seguro')
+                    ->label('Estado del seguro')
+                    ->options([
+                        'Activo' => 'Activo',
+                        'Inactivo' => 'Inactivo',
+                        'En trámite' => 'En trámite',
+                    ])
+                    ->default('Activo')
+                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
+                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
+
+                DatePicker::make('fecha_afiliacion')
+                    ->label('Fecha de afiliación')
+                    ->maxDate(now())
+                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
+                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
             ]);
     }
 
@@ -205,9 +226,7 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
 
     public static function getRelations(): array
     {
-        return [
-            //
-        ];
+        return [];
     }
 
     public static function getPages(): array
@@ -218,45 +237,5 @@ protected static string|\UnitEnum|null $navigationGroup = 'Talento Humano';
             'view' => ViewEmpleado::route('/{record}'),
             'edit' => EditEmpleado::route('/{record}/edit'),
         ];
-    }
-
-    private static function validarCedulaEcuador(string $cedula): bool
-    {
-        if (! preg_match('/^[0-9]{10}$/', $cedula)) {
-            return false;
-        }
-
-        if (preg_match('/^(\d)\1{9}$/', $cedula)) {
-            return false;
-        }
-
-        $provincia = intval(substr($cedula, 0, 2));
-        $tercerDigito = intval($cedula[2]);
-
-        if ($provincia < 1 || $provincia > 24) {
-            return false;
-        }
-
-        if ($tercerDigito > 5) {
-            return false;
-        }
-
-        $coeficientes = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-        $suma = 0;
-
-        for ($i = 0; $i < 9; $i++) {
-            $valor = intval($cedula[$i]) * $coeficientes[$i];
-
-            if ($valor >= 10) {
-                $valor -= 9;
-            }
-
-            $suma += $valor;
-        }
-
-        $digitoCalculado = (10 - ($suma % 10)) % 10;
-        $digitoReal = intval($cedula[9]);
-
-        return $digitoCalculado === $digitoReal;
     }
 }
