@@ -23,12 +23,14 @@ class EmpleadosTable
                 TextColumn::make('cargo')->label('Cargo')->searchable()->sortable(),
                 TextColumn::make('departamento')->label('Departamento')->searchable()->sortable(),
                 TextColumn::make('sueldo')->label('Salario base')->money('USD')->sortable(),
+                TextColumn::make('aporte_personal_iess')->label('IESS empleado')->money('USD'),
+                TextColumn::make('aporte_patronal_iess')->label('IESS patronal')->money('USD')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('total_sanciones_aplicadas')->label('Sanciones')->money('USD'),
+                TextColumn::make('total_descuentos_empleado')->label('Descuentos')->money('USD'),
                 TextColumn::make('sueldo_neto_estimado')->label('Salario neto')->money('USD'),
-                IconColumn::make('tiene_seguro')->label('Seguro')->boolean(),
-                TextColumn::make('estado_seguro')->label('Estado seguro')->badge()->color(fn (?string $state): string => match ($state) {
+                IconColumn::make('tiene_seguro')->label('IESS')->boolean(),
+                TextColumn::make('estado_seguro')->label('Estado IESS')->badge()->color(fn (?string $state): string => match ($state) {
                     'Activo' => 'success',
-                    'En trámite' => 'warning',
                     'Inactivo' => 'danger',
                     default => 'gray',
                 }),

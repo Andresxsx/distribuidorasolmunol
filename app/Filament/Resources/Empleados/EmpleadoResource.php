@@ -161,9 +161,12 @@ class EmpleadoResource extends Resource
                 DatePicker::make('fecha_ingreso')
                     ->label('Fecha de ingreso')
                     ->default(now())
+                    ->minDate(Empleado::FECHA_MINIMA_INGRESO)
                     ->maxDate(now())
+                    ->live()
+                    ->afterStateUpdated(fn ($state, $set) => $set('fecha_afiliacion', $state))
                     ->required()
-                    ->helperText('No se permiten fechas futuras.'),
+                    ->helperText('Debe estar entre el 01/01/2000 y la fecha actual. No se permiten fechas futuras ni incoherentes.'),
 
                 Select::make('estado')
                     ->label('Estado')
@@ -177,40 +180,49 @@ class EmpleadoResource extends Resource
                     ->default('Activo'),
 
                 Toggle::make('tiene_seguro')
-                    ->label('Tiene seguro')
-                    ->live()
-                    ->helperText('Actívelo si el empleado tiene seguro IESS o privado.'),
+                    ->label('Seguro IESS obligatorio')
+                    ->default(true)
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('En Ecuador el empleado en relación de dependencia se registra con seguro IESS. No se cambia a privado en este ERP.'),
 
                 Select::make('tipo_seguro')
                     ->label('Tipo de seguro')
                     ->options([
                         'IESS' => 'IESS',
-                        'Privado' => 'Privado',
                     ])
-                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
-                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
+                    ->default('IESS')
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->required()
+                    ->helperText('Fijo: IESS.'),
 
                 TextInput::make('numero_afiliacion')
-                    ->label('Número de afiliación')
+                    ->label('Número de afiliación IESS')
                     ->maxLength(80)
-                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro')),
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('Se usa automáticamente la cédula del empleado como referencia de afiliación.'),
 
                 Select::make('estado_seguro')
                     ->label('Estado del seguro')
                     ->options([
                         'Activo' => 'Activo',
                         'Inactivo' => 'Inactivo',
-                        'En trámite' => 'En trámite',
                     ])
                     ->default('Activo')
-                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
-                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->required()
+                    ->helperText('Activo para empleados activos o suspendidos; inactivo para retirados o inactivos.'),
 
                 DatePicker::make('fecha_afiliacion')
-                    ->label('Fecha de afiliación')
+                    ->label('Fecha de afiliación IESS')
+                    ->minDate(Empleado::FECHA_MINIMA_INGRESO)
                     ->maxDate(now())
-                    ->visible(fn ($get): bool => (bool) $get('tiene_seguro'))
-                    ->required(fn ($get): bool => (bool) $get('tiene_seguro')),
+                    ->disabled()
+                    ->dehydrated(true)
+                    ->helperText('Se iguala automáticamente a la fecha de ingreso del empleado.'),
             ]);
     }
 

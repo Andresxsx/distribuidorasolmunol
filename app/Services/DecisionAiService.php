@@ -181,21 +181,22 @@ Empleados activos: {$activos}.
 Empleados activos sin seguro registrado: {$sinSeguro}.
 Sanciones aplicadas: {$sancionesAplicadas}.
 Descuentos salariales aplicados: {$descuentos}.
+Seguro obligatorio aplicado: IESS, con aporte personal 9.45%, patronal 11.15% y total 20.60% sobre salario base.
 
 Hallazgos:
-La empresa ya puede controlar cargos fijos, salario base por cargo, seguro del empleado y sanciones con motivo. Si hay empleados sin seguro, ese dato debe revisarse porque representa una alerta administrativa.
+La empresa controla cargos fijos, salario base por cargo, seguro IESS automático y sanciones con motivo. El salario neto debe descontar el aporte personal IESS y las sanciones aplicadas.
 
 Nivel de riesgo o prioridad:
-Medio. El riesgo aumenta si existen empleados activos sin seguro o sanciones repetidas sin plan de mejora.
+Medio. El riesgo aumenta si existen sanciones repetidas sin plan de mejora, cargos sin salario fijo o fechas de ingreso incoherentes.
 
 Recomendación administrativa:
-Revisar empleados activos sin seguro, validar que todos tengan cargo asignado y usar las sanciones solo con motivo documentado. Las sanciones deben afectar el salario neto únicamente cuando estén en estado Aplicada.
+Validar que todos los empleados tengan cargo asignado, fecha de ingreso lógica y seguro IESS activo. Las sanciones deben afectar el salario neto únicamente cuando estén en estado Aplicada.
 
 Plan de acción:
 1. Revisar el módulo Cargos y confirmar salarios base.
-2. Revisar empleados activos sin seguro registrado.
+2. Confirmar que el seguro IESS esté automático en todos los empleados.
 3. Registrar sanciones solo con motivo claro y evidencia administrativa.
-4. Comparar salario base, descuentos y salario neto.
+4. Comparar salario base, IESS personal, sanciones y salario neto.
 5. Pedir a Talento Humano seguimiento mensual de casos con sanciones.
 
 Decisión sugerida:
@@ -210,8 +211,11 @@ TXT;
         $nombre = trim("{$empleado->nombres} {$empleado->apellidos}");
         $sanciones = $empleado->sanciones()->orderByDesc('fecha')->limit(5)->get();
         $totalSanciones = round((float) $empleado->sancionesAplicadas()->sum('valor_descuento'), 2);
-        $sueldoNeto = max(round((float) $empleado->sueldo - $totalSanciones, 2), 0);
-        $seguro = $empleado->tiene_seguro ? "Sí, {$empleado->tipo_seguro}, estado {$empleado->estado_seguro}" : 'No registrado';
+        $aportePersonal = $empleado->aporte_personal_iess;
+        $aportePatronal = $empleado->aporte_patronal_iess;
+        $totalAporteIess = $empleado->total_aporte_iess;
+        $sueldoNeto = $empleado->sueldo_neto_estimado;
+        $seguro = "IESS fijo, estado {$empleado->estado_seguro}, afiliación {$empleado->numero_afiliacion}";
         $detalleSanciones = $sanciones->isEmpty()
             ? 'No tiene sanciones registradas.'
             : $sanciones->map(fn ($s) => $this->formatearFecha($s->fecha) . ": {$s->tipo}, estado {$s->estado}, descuento {$s->valor_descuento}, motivo: {$s->motivo}")->implode("\n");
@@ -240,26 +244,31 @@ Se analizó al empleado {$nombre}. Su cargo es {$empleado->cargo}, pertenece al 
 
 Datos encontrados:
 Salario base por cargo: {$empleado->sueldo}.
+Aporte personal IESS 9.45%: {$aportePersonal}.
+Aporte patronal IESS 11.15%: {$aportePatronal}.
+Total aporte IESS 20.60%: {$totalAporteIess}.
 Sanciones aplicadas: {$totalSanciones}.
 Salario neto estimado: {$sueldoNeto}.
 Seguro: {$seguro}.
+Fecha de ingreso: {$this->formatearFecha($empleado->fecha_ingreso)}.
+Fecha de afiliación IESS: {$this->formatearFecha($empleado->fecha_afiliacion)}.
 Sanciones registradas:
 {$detalleSanciones}
 
 Hallazgos:
-El salario base debe mantenerse igual para todos los empleados con el cargo {$empleado->cargo}. Cualquier descuento debe venir desde sanciones registradas con motivo y estado Aplicada.
+El salario base debe mantenerse igual para todos los empleados con el cargo {$empleado->cargo}. El descuento fijo del empleado es el aporte personal IESS y cualquier descuento adicional debe venir desde sanciones registradas con motivo y estado Aplicada.
 
 Nivel de riesgo o prioridad:
 {$riesgo}. {$motivo}
 
 Recomendación administrativa:
-No aplicar despido, multa adicional ni sanción definitiva sin revisar evidencias. Si hay sanciones, validar el motivo y mantener seguimiento por Talento Humano. Si no tiene seguro, regularizar o actualizar el registro.
+No aplicar despido, multa adicional ni sanción definitiva sin revisar evidencias. Si hay sanciones, validar el motivo y mantener seguimiento por Talento Humano. El seguro IESS debe permanecer automático y la fecha de afiliación debe coincidir con la fecha de ingreso.
 
 Plan de acción:
 1. Confirmar que el cargo y departamento sean correctos.
-2. Revisar si el seguro está activo y documentado.
+2. Revisar si el seguro IESS está activo y documentado.
 3. Revisar sanciones y motivos registrados.
-4. Calcular salario neto con descuentos aplicados.
+4. Calcular salario neto con aporte personal IESS y descuentos aplicados.
 5. Definir seguimiento o capacitación según el historial.
 
 Decisión sugerida:
@@ -606,6 +615,10 @@ Código: {$empleado->codigo_empleado}
 Cargo: {$empleado->cargo}
 Departamento: {$empleado->departamento}
 Salario base: {$empleado->sueldo}
+Aporte personal IESS 9.45%: {$empleado->aporte_personal_iess}
+Aporte patronal IESS 11.15%: {$empleado->aporte_patronal_iess}
+Total aporte IESS 20.60%: {$empleado->total_aporte_iess}
+Total descuentos del empleado: {$empleado->total_descuentos_empleado}
 Salario neto estimado: {$empleado->sueldo_neto_estimado}
 Seguro: {$this->textoSeguro($empleado)}
 Estado: {$empleado->estado}
@@ -616,11 +629,7 @@ TXT;
 
     private function textoSeguro(Empleado $empleado): string
     {
-        if (! $empleado->tiene_seguro) {
-            return 'No registrado';
-        }
-
-        return trim("{$empleado->tipo_seguro}, {$empleado->estado_seguro}, afiliación {$empleado->numero_afiliacion}");
+        return trim("IESS fijo, {$empleado->estado_seguro}, afiliación {$empleado->numero_afiliacion}, fecha {$this->formatearFecha($empleado->fecha_afiliacion)}");
     }
 
     private function esPreguntaTalentoHumano(string $pregunta): bool

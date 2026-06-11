@@ -4,10 +4,19 @@ namespace App\Models;
 
 use App\Support\FormatoDatos;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class Empleado extends Model
 {
+    public const FECHA_MINIMA_INGRESO = '2000-01-01';
+
+    public const APORTE_PERSONAL_IESS = 9.45;
+
+    public const APORTE_PATRONAL_IESS = 11.15;
+
+    public const TOTAL_APORTE_IESS = 20.60;
+
     protected $fillable = [
         'codigo_empleado',
         'cargo_id',
@@ -36,7 +45,11 @@ class Empleado extends Model
     ];
 
     protected $appends = [
+        'aporte_personal_iess',
+        'aporte_patronal_iess',
+        'total_aporte_iess',
         'total_sanciones_aplicadas',
+        'total_descuentos_empleado',
         'sueldo_neto_estimado',
     ];
 
@@ -81,10 +94,6 @@ class Empleado extends Model
             $empleado->telefono = FormatoDatos::soloNumeros($empleado->telefono);
             $empleado->correo = FormatoDatos::correo($empleado->correo);
             $empleado->estado = FormatoDatos::estado($empleado->estado);
-            $empleado->tipo_seguro = $empleado->tiene_seguro ? FormatoDatos::espacios($empleado->tipo_seguro) : null;
-            $empleado->numero_afiliacion = $empleado->tiene_seguro ? FormatoDatos::codigo($empleado->numero_afiliacion) : null;
-            $empleado->estado_seguro = $empleado->tiene_seguro ? FormatoDatos::estado($empleado->estado_seguro) : 'No registrado';
-            $empleado->fecha_afiliacion = $empleado->tiene_seguro ? $empleado->fecha_afiliacion : null;
 
             if (! self::validarCedulaEcuador((string) $empleado->cedula)) {
                 throw ValidationException::withMessages([
@@ -168,9 +177,19 @@ class Empleado extends Model
                 ]);
             }
 
-            if ($empleado->fecha_ingreso->isFuture()) {
+            $fechaIngreso = Carbon::parse($empleado->fecha_ingreso)->startOfDay();
+            $fechaMinima = Carbon::parse(self::FECHA_MINIMA_INGRESO)->startOfDay();
+            $hoy = Carbon::today();
+
+            if ($fechaIngreso->isFuture() || $fechaIngreso->gt($hoy)) {
                 throw ValidationException::withMessages([
                     'fecha_ingreso' => 'La fecha de ingreso no puede ser futura.',
+                ]);
+            }
+
+            if ($fechaIngreso->lt($fechaMinima)) {
+                throw ValidationException::withMessages([
+                    'fecha_ingreso' => 'La fecha de ingreso no puede ser anterior al 01/01/2000. Revise que no haya escrito una fecha incoherente.',
                 ]);
             }
 
@@ -180,31 +199,13 @@ class Empleado extends Model
                 ]);
             }
 
-            if ($empleado->tiene_seguro) {
-                if (! in_array($empleado->tipo_seguro, ['IESS', 'Privado'], true)) {
-                    throw ValidationException::withMessages([
-                        'tipo_seguro' => 'Seleccione el tipo de seguro.',
-                    ]);
-                }
-
-                if (! in_array($empleado->estado_seguro, ['Activo', 'Inactivo', 'En trámite'], true)) {
-                    throw ValidationException::withMessages([
-                        'estado_seguro' => 'Seleccione un estado de seguro válido.',
-                    ]);
-                }
-
-                if (! $empleado->fecha_afiliacion) {
-                    throw ValidationException::withMessages([
-                        'fecha_afiliacion' => 'La fecha de afiliación es obligatoria cuando el empleado tiene seguro.',
-                    ]);
-                }
-
-                if ($empleado->fecha_afiliacion->isFuture()) {
-                    throw ValidationException::withMessages([
-                        'fecha_afiliacion' => 'La fecha de afiliación no puede ser futura.',
-                    ]);
-                }
-            }
+            // Seguro fijo ecuatoriano: todo empleado registrado queda bajo IESS.
+            // El número de afiliación se usa como la cédula cuando no se ingresa otro dato.
+            $empleado->tiene_seguro = true;
+            $empleado->tipo_seguro = 'IESS';
+            $empleado->numero_afiliacion = FormatoDatos::codigo($empleado->numero_afiliacion ?: $empleado->cedula);
+            $empleado->fecha_afiliacion = $fechaIngreso->toDateString();
+            $empleado->estado_seguro = in_array($empleado->estado, ['Retirado', 'Inactivo'], true) ? 'Inactivo' : 'Activo';
         });
     }
 
@@ -223,14 +224,34 @@ class Empleado extends Model
         return $this->hasMany(SancionEmpleado::class)->where('estado', 'Aplicada');
     }
 
+    public function getAportePersonalIessAttribute(): float
+    {
+        return round(((float) $this->sueldo * self::APORTE_PERSONAL_IESS) / 100, 2);
+    }
+
+    public function getAportePatronalIessAttribute(): float
+    {
+        return round(((float) $this->sueldo * self::APORTE_PATRONAL_IESS) / 100, 2);
+    }
+
+    public function getTotalAporteIessAttribute(): float
+    {
+        return round($this->aporte_personal_iess + $this->aporte_patronal_iess, 2);
+    }
+
     public function getTotalSancionesAplicadasAttribute(): float
     {
         return round((float) $this->sancionesAplicadas()->sum('valor_descuento'), 2);
     }
 
+    public function getTotalDescuentosEmpleadoAttribute(): float
+    {
+        return round($this->aporte_personal_iess + $this->total_sanciones_aplicadas, 2);
+    }
+
     public function getSueldoNetoEstimadoAttribute(): float
     {
-        return max(round((float) $this->sueldo - (float) $this->total_sanciones_aplicadas, 2), 0);
+        return max(round((float) $this->sueldo - (float) $this->total_descuentos_empleado, 2), 0);
     }
 
     private static function generarCodigoEmpleado(): string
